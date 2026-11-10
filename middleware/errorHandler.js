@@ -6,6 +6,10 @@ export function notFound(req, res) {
 }
 
 export function errorHandler(error, _req, res, _next) {
+  if (error.code === 'EBADCSRFTOKEN') {
+    return res.status(403).json({ success: false, message: 'Your security token expired. Refresh and try again.' });
+  }
+
   if (error.name === 'CastError' && error.kind === 'ObjectId') {
     return res.status(400).json({ success: false, message: 'Invalid user id' });
   }
