@@ -6,6 +6,8 @@ import MongoStore from 'connect-mongo';
 import { csrfSync } from 'csrf-sync';
 import passport from './config/passport.js';
 import authRoutes from './routes/auth.routes.js';
+import appointmentRoutes from './routes/appointment.routes.js';
+import publicBookingRoutes from './routes/publicBooking.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import userRoutes from './routes/user.routes.js';
@@ -55,6 +57,8 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ success: true, message: 'API is healthy' });
 });
 app.use('/api/auth', authRoutes);
+app.use('/api/public-booking', publicBookingRoutes);
+app.use('/api/appointments', requireAuth, appointmentRoutes);
 app.use('/api/users', requireAuth, userRoutes);
 app.use(notFound);
 app.use(errorHandler);

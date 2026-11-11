@@ -11,7 +11,11 @@ export function errorHandler(error, _req, res, _next) {
   }
 
   if (error.name === 'CastError' && error.kind === 'ObjectId') {
-    return res.status(400).json({ success: false, message: 'Invalid user id' });
+    return res.status(400).json({ success: false, message: 'Invalid record id' });
+  }
+
+  if (error.status === 503) {
+    return res.status(503).json({ success: false, message: 'Booking system is busy processing other requests. Please try again.' });
   }
 
   if (error.code === 11000) {

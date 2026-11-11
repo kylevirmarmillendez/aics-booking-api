@@ -42,6 +42,20 @@ The client is available at `http://localhost:3000` and the Express API at `http:
 - `PUT /api/users/:id` — Update user fields.
 - `DELETE /api/users/:id` — Delete a user.
 
+## Public AICS appointment booking
+
+The public page at `/aics-appointment-booking` does not require a staff account. Its API routes are also public and rate-limited:
+
+- `GET /api/public-booking/calendar-rules` — Return date bounds, holidays, slot times, and capacity.
+- `GET /api/public-booking/availability?date=YYYY-MM-DD` — Return open slots and remaining daily capacity.
+- `POST /api/public-booking` — Book an appointment. Accepts `typeOfAssistance` (`Medical` or `Funeral`), `fullName`, `cellNumber` (11 digits beginning with `09`), optional `email`, `appointmentDate` (`YYYY-MM-DD`), and `timeSlot`.
+- `POST /api/public-booking/lookup` — Find a booking using `appointmentCode` and the booking `cellNumber`.
+- `POST /api/public-booking/cancel` — Cancel a future booking using the same two values and optional `cancellationReason`.
+
+Public booking requests are validated on both client and API. Dates on weekends, configured holidays, in the past, or beyond `BOOKING_CALENDAR_VALID_THROUGH` are rejected. MongoDB-backed date locks serialize concurrent reservations so daily and per-slot capacity limits are enforced across API instances. The 2026 Philippine regular holiday list is currently configured in the booking controller and should be updated when official annual/Eid dates are announced.
+
+Google Calendar events and email notifications are optional integrations. To enable them, configure `GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, and `GOOGLE_PRIVATE_KEY` with a service account that has event access to the target calendar, and configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`. If these values are omitted, booking still works; integration failures are logged and do not roll back a reserved appointment. Capacity can be changed with `BOOKING_DAILY_CAPACITY` and `BOOKING_TIME_SLOT_CAPACITY`.
+
 ## Seed sample users
 
 The seeder inserts nine sample accounts and skips records whose email or username already exists, so it can be run repeatedly without duplicating users. All seeded accounts share the password provided through `SEED_USER_PASSWORD`; the Mongoose save hook bcrypt-hashes it. Choose a temporary local password that meets the API password rules, and do not reuse it for real accounts.
