@@ -1,0 +1,38 @@
+name: Production hotfix
+description: Request an urgent production fix outside the normal release cycle.
+title: "[Hotfix]: "
+labels: ["hotfix", "priority: critical"]
+body:
+  - type: textarea
+    id: impact
+    attributes:
+      label: Production impact
+      description: Describe the affected service, users, and severity.
+    validations:
+      required: true
+  - type: textarea
+    id: incident
+    attributes:
+      label: Symptoms and reproduction
+      description: Include incident details, timestamps, and reliable reproduction steps.
+    validations:
+      required: true
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Current mitigation
+      description: Is there a workaround or rollback available?
+  - type: textarea
+    id: fix
+    attributes:
+      label: Proposed minimal fix
+      description: Describe the smallest safe change that resolves the incident.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification and rollback plan
+      description: Explain how the fix will be validated and reverted if needed.
+    validations:
+      required: true

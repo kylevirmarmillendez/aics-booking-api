@@ -1,0 +1,31 @@
+name: Pull request
+# GitHub does not load YAML pull request templates natively. Keep this alongside
+# PULL_REQUEST_TEMPLATE.md as the structured source for tooling/conversion.
+change_types:
+  - feature
+  - enhancement
+  - bug
+  - hotfix
+sections:
+  - id: summary
+    required: true
+    prompt: What changed and why?
+  - id: related_issue
+    required: false
+    prompt: Link related issues (Fixes, Closes, or Related to #123).
+  - id: implementation_notes
+    required: false
+    prompt: Note important design, API, data, migration, or configuration details.
+  - id: verification
+    required: true
+    checklist:
+      - Automated tests added or updated
+      - Relevant tests/builds pass
+      - Affected flow manually verified, if applicable
+      - Documentation/configuration updated, if needed
+  - id: deployment_and_risk
+    required: true
+    prompt: Note deployment steps, compatibility risks, monitoring, and rollback plan.
+  - id: screenshots
+    required: false
+    prompt: Add before/after screenshots for UI changes.
