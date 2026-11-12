@@ -8,9 +8,11 @@ import passport from './config/passport.js';
 import authRoutes from './routes/auth.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
 import publicBookingRoutes from './routes/publicBooking.routes.js';
-import { requireAuth } from './middleware/auth.js';
+import { requireRoles } from './middleware/auth.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import userRoutes from './routes/user.routes.js';
+import officeRoutes from './routes/office.routes.js';
+import assistanceTypeRoutes from './routes/assistanceType.routes.js';
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3002,http://localhost:3003')
@@ -58,8 +60,10 @@ app.get('/health', (_req, res) => {
 });
 app.use('/api/auth', authRoutes);
 app.use('/api/public-booking', publicBookingRoutes);
-app.use('/api/appointments', requireAuth, appointmentRoutes);
-app.use('/api/users', requireAuth, userRoutes);
+app.use('/api/appointments', requireRoles('super_admin', 'admin', 'booking_officer'), appointmentRoutes);
+app.use('/api/users', requireRoles('super_admin'), userRoutes);
+app.use('/api/offices', requireRoles('super_admin', 'admin'), officeRoutes);
+app.use('/api/assistance-types', requireRoles('super_admin', 'admin'), assistanceTypeRoutes);
 app.use(notFound);
 app.use(errorHandler);
 

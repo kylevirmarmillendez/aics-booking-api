@@ -5,6 +5,8 @@ import {
   createPublicBooking,
   getAvailableBookingSlots,
   getBookingCalendarRules,
+  getPublicAssistanceTypes,
+  getPublicOffices,
   lookupPublicBooking
 } from '../controllers/publicBooking.controller.js';
 import { validate } from '../middleware/validate.js';
@@ -32,6 +34,8 @@ const bookingLimiter = rateLimit({
 
 router.use(publicRequestLimiter);
 router.get('/calendar-rules', getBookingCalendarRules);
+router.get('/assistance-types', getPublicAssistanceTypes);
+router.get('/offices', getPublicOffices);
 router.get('/availability', getAvailableBookingSlots);
 router.post('/', bookingLimiter, validate(createPublicBookingSchema), createPublicBooking);
 router.post('/lookup', validate(lookupPublicBookingSchema), lookupPublicBooking);

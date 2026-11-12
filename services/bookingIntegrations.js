@@ -37,6 +37,7 @@ function getCalendarClient() {
 export async function createCalendarEvent(appointment) {
   const calendar = getCalendarClient();
   if (!calendar) return null;
+  const periodDurationMs = ['AM', 'PM'].includes(appointment.timeSlot) ? 4 * 60 * 60 * 1000 : 60 * 60 * 1000;
 
   const response = await calendar.events.insert({
     calendarId: process.env.GOOGLE_CALENDAR_ID,
@@ -44,11 +45,12 @@ export async function createCalendarEvent(appointment) {
       summary: `[${appointment.appointmentCode}] [AICS ${appointment.typeOfAssistance}] - ${appointment.fullName}`,
       description: [
         `Appointment Code: ${appointment.appointmentCode}`,
+        `Office: ${appointment.officeName || 'Not specified'}`,
         `Cell Number: ${appointment.cellNumber}`,
         `Assistance: ${appointment.typeOfAssistance}`
       ].join('\n'),
       start: { dateTime: appointment.appointmentDateTimeSlot.toISOString(), timeZone: 'Asia/Manila' },
-      end: { dateTime: new Date(appointment.appointmentDateTimeSlot.getTime() + 60 * 60 * 1000).toISOString(), timeZone: 'Asia/Manila' },
+      end: { dateTime: new Date(appointment.appointmentDateTimeSlot.getTime() + periodDurationMs).toISOString(), timeZone: 'Asia/Manila' },
       attendees: appointment.email ? [{ email: appointment.email }] : undefined
     },
     sendUpdates: appointment.email ? 'all' : 'none'
@@ -79,8 +81,9 @@ export async function sendBookingEmail(appointment) {
       '',
       'Your appointment request has been received.',
       `Reference code: ${appointment.appointmentCode}`,
+      `Office: ${appointment.officeName || 'Not specified'}`,
       `Assistance: ${appointment.typeOfAssistance}`,
-      `Date and time: ${formatAppointmentDate(appointment.appointmentDateTimeSlot)}`,
+      `Date and time: ${formatAppointmentDate(appointment.appointmentDateTimeSlot, appointment.timeSlot)}`,
       `Status: ${appointment.status}`,
       '',
       'Please keep this reference code for your records.'
@@ -101,16 +104,19 @@ export async function sendCancellationEmail(appointment) {
       '',
       'Your appointment has been cancelled.',
       `Reference code: ${appointment.appointmentCode}`,
-      `Date and time: ${formatAppointmentDate(appointment.appointmentDateTimeSlot)}`,
+      `Office: ${appointment.officeName || 'Not specified'}`,
+      `Date and time: ${formatAppointmentDate(appointment.appointmentDateTimeSlot, appointment.timeSlot)}`,
       appointment.cancellationReason ? `Reason: ${appointment.cancellationReason}` : ''
     ].filter(Boolean).join('\n')
   });
 }
 
-function formatAppointmentDate(value) {
-  return new Intl.DateTimeFormat('en-PH', {
+function formatAppointmentDate(value, timeSlot) {
+  const formattedDate = new Intl.DateTimeFormat('en-PH', {
     dateStyle: 'full',
-    timeStyle: 'short',
     timeZone: 'Asia/Manila'
   }).format(value);
+  return ['AM', 'PM'].includes(timeSlot)
+    ? `${formattedDate} (${timeSlot} period)`
+    : `${formattedDate}, ${new Intl.DateTimeFormat('en-PH', { timeStyle: 'short', timeZone: 'Asia/Manila' }).format(value)}`;
 }

@@ -7,7 +7,7 @@ const appointmentFields = {
   cellNumber: Joi.string().trim().min(1),
   email: Joi.string().trim().lowercase().email(),
   appointmentDateTimeSlot: Joi.date(),
-  status: Joi.string().valid('Pending', 'Confirmed', 'Completed', 'Cancelled'),
+  status: Joi.string().valid('Pending', 'Confirmed', 'Arrived', 'No-show', 'Completed', 'Cancelled'),
   calendarEventId: Joi.string().trim().allow(null),
   cancellationReason: Joi.string().trim().allow(null)
 };

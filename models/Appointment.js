@@ -19,6 +19,12 @@ const appointmentSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    firstName: { type: String, trim: true, default: '' },
+    middleName: { type: String, trim: true, default: '' },
+    lastName: { type: String, trim: true, default: '' },
+    birthdate: { type: String, trim: true, default: '' },
+    officeSlug: { type: String, trim: true, lowercase: true, default: '' },
+    officeName: { type: String, trim: true, default: '' },
     cellNumber: {
       type: String,
       required: true,
@@ -39,7 +45,7 @@ const appointmentSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ['Pending', 'Confirmed', 'Completed', 'Cancelled'],
+      enum: ['Pending', 'Confirmed', 'Arrived', 'No-show', 'Completed', 'Cancelled'],
       default: 'Pending'
     },
     calendarEventId: {

@@ -64,8 +64,8 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'admin'],
-      default: 'user',
+      enum: ['super_admin', 'admin', 'booking_officer', 'congressional_officer'],
+      default: 'booking_officer',
       required: true
     },
     status: {

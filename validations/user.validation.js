@@ -30,7 +30,7 @@ const userFields = {
   office: optionalText,
   region: optionalText,
   password,
-  role: Joi.string().valid('user', 'admin'),
+  role: Joi.string().valid('super_admin', 'admin', 'booking_officer', 'congressional_officer'),
   status: Joi.string().valid('Active', 'Inactive', 'Pending')
 };
 
@@ -41,7 +41,7 @@ export const createUserSchema = Joi.object({
   email: userFields.email.required(),
   username: userFields.username.required(),
   password: userFields.password.required(),
-  role: userFields.role.default('user'),
+  role: userFields.role.default('booking_officer'),
   status: userFields.status.default('Active')
 }).required();
 

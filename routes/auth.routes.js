@@ -52,7 +52,7 @@ router.get('/me', (req, res) => {
 
 router.post('/register', registrationLimiter, validate(registerSchema), async (req, res, next) => {
   try {
-    const user = await User.create({ ...req.body, role: 'user', status: 'Active' });
+    const user = await User.create({ ...req.body, role: 'booking_officer', status: 'Active' });
     req.logIn(user, (error) => {
       if (error) return next(error);
       return req.session.save((saveError) => {

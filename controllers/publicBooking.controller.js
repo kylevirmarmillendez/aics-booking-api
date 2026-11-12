@@ -1,23 +1,20 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import Appointment from '../models/Appointment.js';
+import AssistanceType from '../models/AssistanceType.js';
 import BookingLock from '../models/BookingLock.js';
+import Office from '../models/Office.js';
 import {
   createCalendarEvent,
   deleteCalendarEvent,
   sendBookingEmail,
   sendCancellationEmail
 } from '../services/bookingIntegrations.js';
+import { getDefaultAssistanceTypes, seedDefaultAssistanceTypes } from '../services/assistanceTypes.js';
+import { getDefaultOffices, migrateLegacyOfficeCapacities, seedDefaultOffices } from '../services/offices.js';
 
-const DAILY_CAPACITY = Number(process.env.BOOKING_DAILY_CAPACITY) || 80;
-const TIME_SLOT_CAPACITY = Number(process.env.BOOKING_TIME_SLOT_CAPACITY) || 14;
-const TIME_SLOTS = [
-  '08:00 AM - 09:00 AM',
-  '09:00 AM - 10:00 AM',
-  '10:00 AM - 11:00 AM',
-  '01:00 PM - 02:00 PM',
-  '02:00 PM - 03:00 PM',
-  '03:00 PM - 04:00 PM'
-];
+const TIME_SLOTS = ['AM', 'PM'];
+const TIME_SLOT_CAPACITY = 30;
+const DAILY_CAPACITY = 60;
 const HOLIDAYS = {
   '2026-01-01': "New Year's Day",
   '2026-03-20': "Eid'l Fitr",
@@ -66,21 +63,36 @@ function validateBookableDate(dateString) {
 }
 
 function localDateTime(dateString, timeSlot) {
-  const time = timeSlot.split(' - ')[0];
-  const match = time.match(/^(\d{1,2}):(\d{2}) (AM|PM)$/);
-  if (!match) return null;
-  let hour = Number(match[1]);
-  if (match[3] === 'PM' && hour !== 12) hour += 12;
-  if (match[3] === 'AM' && hour === 12) hour = 0;
-  const value = new Date(`${dateString}T${String(hour).padStart(2, '0')}:${match[2]}:00+08:00`);
+  if (!TIME_SLOTS.includes(timeSlot)) return null;
+  const hour = timeSlot === 'AM' ? 8 : 13;
+  const value = new Date(`${dateString}T${String(hour).padStart(2, '0')}:00:00+08:00`);
   return Number.isNaN(value.getTime()) ? null : value;
 }
 
+function periodHasEnded(dateString, timeSlot, now = new Date()) {
+  if (!TIME_SLOTS.includes(timeSlot)) return true;
+  const endHour = timeSlot === 'AM' ? 12 : 17;
+  const periodEnd = new Date(`${dateString}T${String(endHour).padStart(2, '0')}:00:00+08:00`);
+  return periodEnd <= now;
+}
+
 function slotCounts(appointments) {
-  return Object.fromEntries(TIME_SLOTS.map((slot) => [
-    slot,
-    appointments.filter((appointment) => appointment.timeSlot === slot).length
-  ]));
+  const counts = { AM: 0, PM: 0 };
+  appointments.forEach((appointment) => {
+    const savedSlot = appointment.timeSlot || '';
+    const legacyPeriod = savedSlot.match(/\b(AM|PM)\b/i)?.[1]?.toUpperCase();
+    const period = TIME_SLOTS.includes(savedSlot) ? savedSlot : legacyPeriod;
+    if (period) counts[period] += 1;
+  });
+  return counts;
+}
+
+function appointmentTimeSlot(appointment) {
+  const savedSlot = appointment.timeSlot || '';
+  if (TIME_SLOTS.includes(savedSlot)) return savedSlot;
+  const legacyPeriod = savedSlot.match(/\b(AM|PM)\b/i)?.[1]?.toUpperCase();
+  if (legacyPeriod) return legacyPeriod;
+  return new Date(appointment.appointmentDateTimeSlot).getUTCHours() + 8 < 12 ? 'AM' : 'PM';
 }
 
 function publicAppointment(appointment) {
@@ -89,12 +101,16 @@ function publicAppointment(appointment) {
     appointmentCode: appointment.appointmentCode,
     assistanceType: appointment.typeOfAssistance,
     fullName: appointment.fullName,
+    firstName: appointment.firstName || '',
+    middleName: appointment.middleName || '',
+    lastName: appointment.lastName || '',
+    birthdate: appointment.birthdate || '',
+    officeSlug: appointment.officeSlug || '',
+    officeName: appointment.officeName || '',
     email: appointment.email || '',
     cellNumber: appointment.cellNumber,
     appointmentDate,
-    timeSlot: appointment.timeSlot || new Intl.DateTimeFormat('en-PH', {
-      timeStyle: 'short', timeZone: 'Asia/Manila'
-    }).format(appointment.appointmentDateTimeSlot),
+    timeSlot: appointmentTimeSlot(appointment),
     status: appointment.status,
     cancellationReason: appointment.cancellationReason || '',
     canCancel: appointment.status !== 'Cancelled' && appointmentDate >= manilaDate()
@@ -135,8 +151,8 @@ async function releaseDateLock(dateKey, token) {
   );
 }
 
-function makeAppointmentCode(typeOfAssistance, year) {
-  const prefix = typeOfAssistance === 'Medical' ? 'MED' : 'FUN';
+function makeAppointmentCode(prefix, year) {
+  if (!prefix) throw new Error('Unsupported assistance type.');
   let suffix = '';
   for (let index = 0; index < 5; index += 1) suffix += CODE_CHARS[randomInt(CODE_CHARS.length)];
   return `AICS-${prefix}-${year}-${suffix}`;
@@ -160,9 +176,42 @@ export function getBookingCalendarRules(_req, res) {
   });
 }
 
+export async function getPublicAssistanceTypes(_req, res, next) {
+  try {
+    await seedDefaultAssistanceTypes();
+    const assistanceTypes = await AssistanceType.find({ active: true })
+      .select('code name requirements')
+      .sort({ name: 1 })
+      .lean();
+    return res.status(200).json({
+      success: true,
+      data: assistanceTypes.length ? assistanceTypes : getDefaultAssistanceTypes()
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getPublicOffices(_req, res, next) {
+  try {
+    await seedDefaultOffices();
+    await migrateLegacyOfficeCapacities();
+    const offices = await Office.find({ active: true })
+      .select('slug name officeType province city address contacts hours serviceArea dailyCapacity amCapacity pmCapacity periodCapacity links sourceNote')
+      .sort({ province: 1, city: 1, name: 1 })
+      .lean();
+    return res.status(200).json({
+      success: true,
+      data: offices.length ? offices : getDefaultOffices()
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function getAvailableBookingSlots(req, res, next) {
   try {
-    const { date } = req.query;
+    const { date, officeSlug } = req.query;
     const dateError = validateBookableDate(String(date || ''));
     if (dateError) {
       return res.status(400).json({
@@ -173,21 +222,42 @@ export async function getAvailableBookingSlots(req, res, next) {
       });
     }
 
+    if (typeof officeSlug !== 'string' || !officeSlug) {
+      return res.status(400).json({ success: false, message: 'Please select an office.' });
+    }
+    const office = await Office.findOne({ slug: officeSlug, active: true }).select('slug name dailyCapacity amCapacity pmCapacity periodCapacity').lean();
+    if (!office) return res.status(404).json({ success: false, message: 'The selected office is not active.' });
+    const dailyCapacity = office.dailyCapacity || DAILY_CAPACITY;
+    const periodCapacities = {
+      AM: office.amCapacity ?? office.periodCapacity ?? Math.floor(dailyCapacity / 2),
+      PM: office.pmCapacity ?? (office.periodCapacity !== undefined ? office.periodCapacity : dailyCapacity - Math.floor(dailyCapacity / 2))
+    };
+
     const appointments = await Appointment.find({
       appointmentDateKey: date,
+      officeSlug: office.slug,
       status: { $ne: 'Cancelled' }
     }).select('timeSlot');
     const counts = slotCounts(appointments);
-    const remainingSlots = Math.max(DAILY_CAPACITY - appointments.length, 0);
+    const remainingSlots = Math.max(dailyCapacity - appointments.length, 0);
     return res.status(200).json({
       success: true,
       data: {
         selectedDate: date,
+        officeSlug: office.slug,
+        officeName: office.name,
         availableSlots: remainingSlots
-          ? TIME_SLOTS.filter((slot) => counts[slot] < TIME_SLOT_CAPACITY)
+          ? TIME_SLOTS.filter((slot) => counts[slot] < periodCapacities[slot] && !periodHasEnded(date, slot))
           : [],
+        periodRemaining: Object.fromEntries(TIME_SLOTS.map((slot) => [
+          slot,
+          remainingSlots && !periodHasEnded(date, slot)
+            ? Math.max(periodCapacities[slot] - counts[slot], 0)
+            : 0
+        ])),
         remainingSlots,
-        dailyCapacity: DAILY_CAPACITY,
+        dailyCapacity,
+        periodCapacities,
         isFullyBooked: remainingSlots === 0
       }
     });
@@ -197,7 +267,27 @@ export async function getAvailableBookingSlots(req, res, next) {
 }
 
 export async function createPublicBooking(req, res, next) {
-  const { typeOfAssistance, fullName, cellNumber, email, appointmentDate, timeSlot } = req.body;
+  const { typeOfAssistance, officeSlug, firstName, middleName, lastName, birthdate, cellNumber, email, appointmentDate, timeSlot } = req.body;
+  const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
+  let assistanceType;
+  let office;
+  try {
+    [assistanceType, office] = await Promise.all([
+      AssistanceType.findOne({ name: typeOfAssistance, active: true }),
+      Office.findOne({ slug: officeSlug, active: true })
+    ]);
+  } catch (error) {
+    return next(error);
+  }
+  if (!assistanceType) {
+    return res.status(400).json({ success: false, message: 'Please select an active assistance type.' });
+  }
+  if (!office) return res.status(400).json({ success: false, message: 'Please select an active office.' });
+  const dailyCapacity = office.dailyCapacity || DAILY_CAPACITY;
+  const periodCapacities = {
+    AM: office.amCapacity ?? office.periodCapacity ?? Math.floor(dailyCapacity / 2),
+    PM: office.pmCapacity ?? (office.periodCapacity !== undefined ? office.periodCapacity : dailyCapacity - Math.floor(dailyCapacity / 2))
+  };
   const dateError = validateBookableDate(appointmentDate);
   if (dateError) return res.status(400).json({ success: false, message: dateError, dateUnavailable: true });
   if (!TIME_SLOTS.includes(timeSlot)) {
@@ -205,8 +295,8 @@ export async function createPublicBooking(req, res, next) {
   }
 
   const appointmentDateTimeSlot = localDateTime(appointmentDate, timeSlot);
-  if (!appointmentDateTimeSlot || appointmentDateTimeSlot <= new Date()) {
-    return res.status(400).json({ success: false, message: 'Please select a future appointment time.' });
+  if (!appointmentDateTimeSlot || periodHasEnded(appointmentDate, timeSlot)) {
+    return res.status(400).json({ success: false, message: 'Please select an appointment period that has not ended.' });
   }
 
   let appointment;
@@ -220,17 +310,18 @@ export async function createPublicBooking(req, res, next) {
     if (duplicate) {
       return res.status(409).json({ success: false, message: 'An appointment under this name or mobile number is already scheduled for this date.' });
     }
-    if (existing.length >= DAILY_CAPACITY) {
-      return res.status(409).json({ success: false, dailyFull: true, message: 'No more appointment slots are available for this date.', data: { remainingSlots: 0, dailyCapacity: DAILY_CAPACITY } });
+    const officeAppointments = existing.filter((item) => item.officeSlug === office.slug);
+    if (officeAppointments.length >= dailyCapacity) {
+      return res.status(409).json({ success: false, dailyFull: true, message: 'No more appointment slots are available at this office for this date.', data: { remainingSlots: 0, dailyCapacity } });
     }
-    const counts = slotCounts(existing);
-    if (counts[timeSlot] >= TIME_SLOT_CAPACITY) {
-      return res.status(409).json({ success: false, timeSlotFull: true, message: 'That time window has just filled up. Please select another available time.' });
+    const counts = slotCounts(officeAppointments);
+    if (counts[timeSlot] >= periodCapacities[timeSlot]) {
+      return res.status(409).json({ success: false, timeSlotFull: true, message: 'That time period has filled up at this office. Please select another available period or date.' });
     }
 
     let appointmentCode;
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      appointmentCode = makeAppointmentCode(typeOfAssistance, appointmentDate.slice(0, 4));
+      appointmentCode = makeAppointmentCode(assistanceType.codePrefix, appointmentDate.slice(0, 4));
       if (!await Appointment.exists({ appointmentCode })) break;
       appointmentCode = '';
     }
@@ -240,6 +331,12 @@ export async function createPublicBooking(req, res, next) {
       appointmentCode,
       typeOfAssistance,
       fullName,
+      firstName,
+      middleName: middleName || '',
+      lastName,
+      birthdate,
+      officeSlug: office.slug,
+      officeName: office.name,
       cellNumber,
       email: email || '',
       appointmentDateKey: appointmentDate,
@@ -247,7 +344,7 @@ export async function createPublicBooking(req, res, next) {
       appointmentDateTimeSlot,
       status: 'Pending'
     });
-    remainingSlots = DAILY_CAPACITY - existing.length - 1;
+    remainingSlots = dailyCapacity - officeAppointments.length - 1;
   } catch (error) {
     return next(error);
   } finally {
@@ -272,7 +369,7 @@ export async function createPublicBooking(req, res, next) {
   return res.status(201).json({
     success: true,
     message: 'Appointment request received.',
-    data: { ...publicAppointment(appointment), remainingSlots, dailyCapacity: DAILY_CAPACITY }
+    data: { ...publicAppointment(appointment), remainingSlots, dailyCapacity, periodCapacities }
   });
 }
 
