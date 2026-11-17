@@ -11,13 +11,13 @@ Authentication uses Passport Local, HTTP-only session cookies stored in MongoDB,
 ## Start with Docker
 
 1. From this directory, copy `.env.example` to `.env` and replace the example credentials.
-2. Start the client, API, MongoDB, and Mongo Express:
+2. Start the staff client, public booking app, API, and MongoDB:
 
    ```sh
    docker compose up --build
    ```
 
-The client is available at `http://localhost:3000` and the Express API at `http://localhost:8000` (`/health` for its health check). MongoDB and Mongo Express stay private inside the Compose network. Stop the services with `docker compose down`; persisted database data remains in the `mongo_data` volume. Use `docker compose down -v` only when you intend to delete that data.
+The staff client is available at `http://localhost:3000`, the standalone public booking app at `http://localhost:3003`, and the Express API at `http://localhost:8011` (`/health` for its health check). The booking app reaches the API internally through the Compose network, so it does not depend on the API's published host port. Override `API_PORT` or `BOOKING_PORT` in `.env` if those host ports are already in use. MongoDB stays private inside the Compose network. Stop the services with `docker compose down`; persisted database data remains in the `mongo_data` volume. Use `docker compose down -v` only when you intend to delete that data.
 
 ## Start locally
 
@@ -44,14 +44,14 @@ The client is available at `http://localhost:3000` and the Express API at `http:
 
 ## Public AICS appointment booking
 
-The public page at `/aics-appointment-booking` does not require a staff account. Its API routes are also public and rate-limited:
+The standalone Next.js public booking app at `http://localhost:3003` does not require a staff account and uses these public, rate-limited API routes:
 
 - `GET /api/public-booking/calendar-rules` — Return date bounds, holidays, slot times, and capacity.
 - `GET /api/public-booking/assistance-types` — Return active assistance types and their requirements from MongoDB. Defaults are inserted on first request and can be adjusted in the `assistanceTypes` collection.
 - Authenticated Super Admin and Admin staff can manage the assistance catalog with `GET/POST /api/assistance-types` and `GET/PUT/DELETE /api/assistance-types/:id`. Codes and reference prefixes are immutable after creation. Types with booking history are deactivated instead of removed.
 - `GET /api/public-booking/offices` — Return active SWAD, regional, and satellite offices from MongoDB. The supplied Negros Island Region records are inserted on first request and can be adjusted in the `offices` collection.
 - Authenticated staff can manage offices with `GET/POST /api/offices` and `GET/PUT/DELETE /api/offices/:id`. Offices with appointment history cannot be deleted; deactivate them instead.
-- `GET /api/public-booking/availability?date=YYYY-MM-DD` — Return open slots and remaining daily capacity.
+- `GET /api/public-booking/availability?date=YYYY-MM-DD&officeSlug=...` — Return open slots and remaining daily capacity for an office.
 - `POST /api/public-booking` — Book an appointment. Accepts `officeSlug`, `typeOfAssistance`, `firstName`, optional `middleName`, `lastName`, `birthdate` (`YYYY-MM-DD`, not in the future), `cellNumber` (11 digits beginning with `09`), optional `email`, `appointmentDate` (`YYYY-MM-DD`), and `timeSlot`.
 - `POST /api/public-booking/lookup` — Find a booking using `appointmentCode` and the booking `cellNumber`.
 - `POST /api/public-booking/cancel` — Cancel a future booking using the same two values and optional `cancellationReason`.

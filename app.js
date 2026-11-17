@@ -15,7 +15,7 @@ import officeRoutes from './routes/office.routes.js';
 import assistanceTypeRoutes from './routes/assistanceType.routes.js';
 
 const app = express();
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3002,http://localhost:3003')
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004')
   .split(',')
   .map((origin) => origin.trim());
 const cookieName = process.env.SESSION_COOKIE_NAME || 'aics.sid';

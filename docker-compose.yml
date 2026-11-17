@@ -8,7 +8,7 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-local-only-change-this-to-a-random-32-character-secret}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-aics.sid}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004}
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME:-root}:${MONGO_ROOT_PASSWORD:-change-this-local-password}@mongodb:27017/aics_booking?authSource=admin
       BOOKING_CALENDAR_VALID_THROUGH: ${BOOKING_CALENDAR_VALID_THROUGH:-2026-12-31}
       GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
@@ -21,7 +21,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8011}:8000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
@@ -50,6 +50,24 @@ services:
       app:
         condition: service_healthy
 
+  booking:
+    build:
+      context: ../aics-booking
+      dockerfile: Dockerfile
+      args:
+        BACKEND_API_URL: http://app:8000
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      BACKEND_API_URL: http://app:8000
+    ports:
+      - "${BOOKING_PORT:-3003}:3000"
+    depends_on:
+      app:
+        condition: service_healthy
+
   mongodb:
     image: mongo:7
     restart: unless-stopped
@@ -67,6 +85,7 @@ services:
       start_period: 10s
 
   mongo-express:
+    profiles: ["tools"]
     image: mongo-express:1
     restart: unless-stopped
     ports:
