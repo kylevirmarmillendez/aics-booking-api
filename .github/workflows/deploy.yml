@@ -1,0 +1,81 @@
+name: CI and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      REPOSITORY_DIR: aics-booking-api
+      DEPLOY_BRANCH: ${{ github.ref_name }}
+      DEPLOY_ENV: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check JavaScript syntax
+        run: find . -path ./node_modules -prune -o -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+
+      - name: Configure SSH
+        run: |
+          : "${DEPLOY_HOST:?Set DEPLOY_HOST in the selected GitHub Environment}"
+          : "${DEPLOY_USER:?Set DEPLOY_USER in the selected GitHub Environment}"
+          : "${DEPLOY_PATH:?Set DEPLOY_PATH in the selected GitHub Environment}"
+          : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY in the selected GitHub Environment}"
+          : "${DEPLOY_KNOWN_HOSTS:?Set DEPLOY_KNOWN_HOSTS in the selected GitHub Environment}"
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Deploy with Docker Compose
+        run: |
+          set -euo pipefail
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+          printf -v REMOTE_ARGS '%q ' "$DEPLOY_PATH" "$REPOSITORY_DIR" "$DEPLOY_BRANCH" "$DEPLOY_ENV"
+          ssh -i "$HOME/.ssh/deploy_key" -p "$DEPLOY_PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" "bash -s -- $REMOTE_ARGS" <<'REMOTE'
+          set -euo pipefail
+          DEPLOY_PATH="$1"
+          REPOSITORY_DIR="$2"
+          BRANCH="$3"
+          ENVIRONMENT="$4"
+          REPO_PATH="$DEPLOY_PATH/$REPOSITORY_DIR"
+
+          exec 9>"/tmp/aics-booking-${ENVIRONMENT}.deploy.lock"
+          flock -w 300 9
+          git -C "$REPO_PATH" fetch origin "$BRANCH"
+          git -C "$REPO_PATH" checkout -B "$BRANCH" "origin/$BRANCH"
+          cd "$DEPLOY_PATH/aics-booking-api"
+          docker compose up -d --build --remove-orphans
+          REMOTE
