@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, staging]
     timeout-minutes: 20
     environment: staging
     env:
