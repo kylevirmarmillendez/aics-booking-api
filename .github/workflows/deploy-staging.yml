@@ -86,4 +86,5 @@ jobs:
 
           cd "$REPO_PATH"
           docker compose up -d --build --remove-orphans
+          docker compose exec -T app npm run seed:qa
           REMOTE
