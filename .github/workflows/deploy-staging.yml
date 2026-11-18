@@ -1,24 +1,22 @@
-name: CI and Deploy
+name: Deploy to Staging
 
 on:
   push:
     branches:
-      - main
       - staging
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-${{ github.ref_name }}
+  group: deploy-staging
   cancel-in-progress: false
 
 jobs:
   verify-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment:
-      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    environment: staging
     env:
       DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
       DEPLOY_USER: ${{ vars.DEPLOY_USER }}
@@ -27,8 +25,8 @@ jobs:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       REPOSITORY_DIR: aics-booking-api
-      DEPLOY_BRANCH: ${{ github.ref_name }}
-      DEPLOY_ENV: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      DEPLOY_BRANCH: staging
+      DEPLOY_ENV: staging
 
     steps:
       - name: Check out source
@@ -48,11 +46,11 @@ jobs:
 
       - name: Configure SSH
         run: |
-          : "${DEPLOY_HOST:?Set DEPLOY_HOST in the selected GitHub Environment}"
-          : "${DEPLOY_USER:?Set DEPLOY_USER in the selected GitHub Environment}"
-          : "${DEPLOY_PATH:?Set DEPLOY_PATH in the selected GitHub Environment}"
-          : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY in the selected GitHub Environment}"
-          : "${DEPLOY_KNOWN_HOSTS:?Set DEPLOY_KNOWN_HOSTS in the selected GitHub Environment}"
+          : "${DEPLOY_HOST:?Set DEPLOY_HOST in the staging GitHub Environment}"
+          : "${DEPLOY_USER:?Set DEPLOY_USER in the staging GitHub Environment}"
+          : "${DEPLOY_PATH:?Set DEPLOY_PATH in the staging GitHub Environment}"
+          : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY in the staging GitHub Environment}"
+          : "${DEPLOY_KNOWN_HOSTS:?Set DEPLOY_KNOWN_HOSTS in the staging GitHub Environment}"
           mkdir -p "$HOME/.ssh"
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
