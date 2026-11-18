@@ -85,6 +85,6 @@ jobs:
           git -C "$REPO_PATH" reset --hard "origin/$BRANCH"
 
           cd "$REPO_PATH"
-          COMPOSE_BAKE=false BUILDX_BAKE_ENTITLEMENTS_FS=0 docker compose up -d --build --remove-orphans
+          COMPOSE_BAKE=false DOCKER_BUILDKIT=0 docker compose up -d --build --remove-orphans
           docker compose exec -T app npm run seed:qa
           REMOTE
