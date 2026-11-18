@@ -16,6 +16,7 @@ concurrency:
 jobs:
   verify-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     env:
@@ -58,12 +59,17 @@ jobs:
           chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
 
       - name: Deploy with Docker Compose
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           DEPLOY_PORT="${DEPLOY_PORT:-22}"
           printf -v REMOTE_ARGS '%q ' "$DEPLOY_PATH" "$REPOSITORY_DIR" "$DEPLOY_BRANCH" "$DEPLOY_ENV"
           ssh -i "$HOME/.ssh/deploy_key" -p "$DEPLOY_PORT" \
-            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
             "$DEPLOY_USER@$DEPLOY_HOST" "bash -s -- $REMOTE_ARGS" <<'REMOTE'
           set -euo pipefail
           DEPLOY_PATH="$1"
@@ -74,8 +80,11 @@ jobs:
 
           exec 9>"/tmp/aics-booking-${ENVIRONMENT}.deploy.lock"
           flock -w 300 9
+
           git -C "$REPO_PATH" fetch origin "$BRANCH"
           git -C "$REPO_PATH" checkout -B "$BRANCH" "origin/$BRANCH"
-          cd "$DEPLOY_PATH/aics-booking-api"
+          git -C "$REPO_PATH" reset --hard "origin/$BRANCH"
+
+          cd "$REPO_PATH"
           docker compose up -d --build --remove-orphans
           REMOTE
