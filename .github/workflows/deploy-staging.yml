@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, staging]
     timeout-minutes: 20
     environment: staging
     env:
@@ -85,6 +85,6 @@ jobs:
           git -C "$REPO_PATH" reset --hard "origin/$BRANCH"
 
           cd "$REPO_PATH"
-          docker compose up -d --build --remove-orphans
-          docker compose exec -T app npm run seed:qa
+          COMPOSE_BAKE=false DOCKER_BUILDKIT=0 docker compose up -d --build --remove-orphans
+          docker compose exec -T -e NODE_ENV=staging app npm run seed:qa
           REMOTE

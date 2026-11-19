@@ -1,7 +1,10 @@
+import crypto from 'node:crypto';
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import { connectDB } from '../config/db.js';
+import Office from '../models/Office.js';
 import User from '../models/User.js';
+import { seedDefaultOffices } from '../services/offices.js';
 
 const QA_PASSWORD = 'Password@123';
 
@@ -30,17 +33,6 @@ const qaUsers = [
   },
   {
     fname: 'QA',
-    lname: 'Booking Officer',
-    email: 'qa.booking@example.com',
-    username: 'qa_booking_officer',
-    role: 'booking_officer',
-    status: 'Active',
-    phone: '+63 900 000 0003',
-    office: 'NCR Field Office',
-    region: 'National Capital Region'
-  },
-  {
-    fname: 'QA',
     lname: 'Congressional Officer',
     email: 'qa.congressional@example.com',
     username: 'qa_congressional_officer',
@@ -58,10 +50,32 @@ async function run() {
   }
 
   await connectDB();
+  await seedDefaultOffices();
+
+  const offices = await Office.find({}).select('slug name province city').lean();
+  const officeQAUsers = offices.map((office) => {
+    const officeKey = office.slug || office._id.toString();
+    const officeSlug = officeKey.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 12) || 'office';
+    const officeHash = crypto.createHash('sha256').update(officeKey).digest('hex').slice(0, 8);
+    const username = `qa_bo_${officeSlug}_${officeHash}`;
+
+    return {
+      fname: 'QA',
+      lname: `Booking Officer ${office.city || officeSlug}`.slice(0, 50),
+      email: `qa.booking.${officeSlug}.${officeHash}@example.com`,
+      username,
+      role: 'booking_officer',
+      status: 'Active',
+      phone: '',
+      office: office.name,
+      region: office.province || office.city || ''
+    };
+  });
+
   let created = 0;
   let updated = 0;
 
-  for (const userData of qaUsers) {
+  for (const userData of [...qaUsers, ...officeQAUsers]) {
     const existingUser = await User.findOne({
       $or: [{ email: userData.email }, { username: userData.username }]
     });
@@ -80,16 +94,16 @@ async function run() {
       existingUser.password = QA_PASSWORD;
       await existingUser.save();
       updated += 1;
-      console.info(`Reset and updated QA user: ${userData.email} (${userData.role})`);
+      console.info(`Reset and updated QA user: ${userData.username} (${userData.role})`);
       continue;
     }
 
     await User.create({ ...userData, password: QA_PASSWORD });
     created += 1;
-    console.info(`Created QA user: ${userData.email} (${userData.role})`);
+    console.info(`Created QA user: ${userData.username} (${userData.role})`);
   }
 
-  console.info(`QA user seeding finished. Created: ${created}; updated: ${updated}; password: ${QA_PASSWORD}`);
+  console.info(`QA user seeding finished. Created: ${created}; updated: ${updated}; booking officers generated for ${offices.length} office(s).`);
 }
 
 try {
